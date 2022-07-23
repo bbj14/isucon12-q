@@ -25,6 +25,6 @@ for h in 1
 do
    ssh isucon${h} sudo touch /var/log/mysql/mysql-slow.log
    ssh isucon${h} sudo mv /var/log/mysql/mysql-slow.log /var/log/mysql/mysql-slow.log.$now
-   ssh isucon${h} sudo mysqladmin flush-logs
+   ssh isucon${h} sudo mysqladmin -proot flush-logs
    ssh isucon${h} sudo systemctl restart mysql
 done
