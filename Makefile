@@ -14,7 +14,7 @@ analyze:
 
 .PHONY: pprof
 pprof:
-	go tool pprof -http=0.0.0.0:1080 ./go http://localhost:6060/debug/pprof/profile
+	docker compose -f docker-compose-go.yml run webapp go tool pprof -http=0.0.0.0:1080 http://localhost:6060/debug/pprof/profile
 
 .PHONY: setup
 setup:
