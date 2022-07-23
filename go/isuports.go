@@ -97,16 +97,19 @@ func createTenantDB(id int64) error {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to exec sqlite3 %s < %s, out=%s: %w", p, tenantDBSchemaFilePath, string(out), err)
 	}
+
+
+
 	return nil
 }
 
 // システム全体で一意なIDを生成する
-func dispenseID(ctx context.Context) (string, error) {
+func dispenseID(ctx context.Context, tenantId int64) (string, error) {
 	var id int64
 	var lastErr error
 	for i := 0; i < 100; i++ {
 		var ret sql.Result
-		ret, err := adminDB.ExecContext(ctx, "REPLACE INTO id_generator (stub) VALUES (?);", "a")
+		ret, err := adminDB.ExecContext(ctx, "REPLACE INTO id_generator (stub) VALUES (?) where tenant_id = ?;", "a", tenantId)
 		if err != nil {
 			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlock
 				lastErr = fmt.Errorf("error REPLACE INTO id_generator: %w", err)
@@ -522,6 +525,11 @@ func tenantsAddHandler(c echo.Context) error {
 		return fmt.Errorf("error createTenantDB: id=%d name=%s %w", id, name, err)
 	}
 
+	_, err = adminDB.ExecContext(ctx, "INSERT INTO id_generator (id, tenant_id, stub) VALUES (2678400000, ?,?) where tenant_id = ?;", "a", id)
+	if err != nil {
+		return fmt.Errorf("error create id_generator", id, name, err)
+	}
+
 	res := TenantsAddHandlerResult{
 		Tenant: TenantWithBilling{
 			ID:          strconv.FormatInt(id, 10),
@@ -821,7 +829,7 @@ func playersAddHandler(c echo.Context) error {
 
 	pds := make([]PlayerDetail, 0, len(displayNames))
 	for _, displayName := range displayNames {
-		id, err := dispenseID(ctx)
+		id, err := dispenseID(ctx, v.tenantID)
 		if err != nil {
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
@@ -939,7 +947,7 @@ func competitionsAddHandler(c echo.Context) error {
 	title := c.FormValue("title")
 
 	now := time.Now().Unix()
-	id, err := dispenseID(ctx)
+	id, err := dispenseID(ctx,v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error dispenseID: %w", err)
 	}
@@ -1109,7 +1117,7 @@ func competitionScoreHandler(c echo.Context) error {
 				fmt.Sprintf("error strconv.ParseUint: scoreStr=%s, %s", scoreStr, err),
 			)
 		}
-		id, err := dispenseID(ctx)
+		id, err := dispenseID(ctx,v.tenantID)
 		if err != nil {
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
