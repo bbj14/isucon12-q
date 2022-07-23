@@ -6,10 +6,10 @@ now=$(date +%Y%m%d-%H%M%S)
 
 for h in 1
 do
-   rsync -av  --exclude '.git' ./ isucon${h}:/home/isucon/isucari/webapp/
-   ssh isucon${h} sudo systemctl restart isucari.golang.service
-   ssh isucon${h} sudo cp /home/isucon/isucari/webapp/nginx${h}.conf /etc/nginx/nginx.conf
-   ssh isucon${h} sudo cp /home/isucon/isucari/webapp/mysqld${h}.cnf /etc/mysql/mysql.conf.d/mysqld.cnf
+   rsync -av  --exclude '.git' ./ isucon${h}:/home/isucon/webapp/
+   ssh isucon${h} sudo systemctl restart isuports.service
+   ssh isucon${h} sudo cp /home/isucon/webapp/nginx${h}.conf /etc/nginx/nginx.conf
+   ssh isucon${h} sudo cp /home/isucon/webapp/mysqld${h}.cnf /etc/mysql/mysql.conf.d/mysqld.cnf
 done
 
 # nginx

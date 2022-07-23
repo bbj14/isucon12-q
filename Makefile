@@ -1,4 +1,4 @@
-GO_SERVICE_NAME:=isucari.golang
+GO_SERVICE_NAME:=isuports.service
 
 .PHONY: deploy
 deploy:
