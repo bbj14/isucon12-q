@@ -6,7 +6,7 @@ set -e
 echo
 echo '## alp'
 echo '```'
-sudo alp json --file /var/log/nginx/access.log -m "/api/xxx/[0-9a-zA-Z]+,/api/yyy/[0-9a-zA-Z]+" --sort avg -r
+sudo alp json --file /var/log/nginx/access.log -m "/api/player/player/[0-9a-zA-Z]+,/api/organizer/competition/[0-9a-zA-Z]+,/api/organizer/competition/[0-9a-zA-Z],/api/organizer/player/[0-9a-zA-Z],/api/player/competition/[0-9a-zA-Z]" --sort avg -r
 echo '```'
 
 # pt-query-digest で解析
