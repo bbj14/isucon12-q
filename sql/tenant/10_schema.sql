@@ -11,7 +11,7 @@ CREATE TABLE competition (
   updated_at BIGINT NOT NULL
 );
 
-create index tenant_id_idx on competition(tenant_id);
+create index tenant_id1_idx on competition(tenant_id);
 
 CREATE TABLE player (
   id VARCHAR(255) NOT NULL PRIMARY KEY,
@@ -22,7 +22,7 @@ CREATE TABLE player (
   updated_at BIGINT NOT NULL
 );
 
-create index tenant_id_idx on player(tenant_id);
+create index tenant_id2_idx on player(tenant_id);
 
 CREATE TABLE player_score (
   id VARCHAR(255) NOT NULL PRIMARY KEY,
@@ -36,5 +36,5 @@ CREATE TABLE player_score (
 );
 
 create index player_id_idx on player_score(player_id);
-create index tenant_id_idx on player_score(tenant_id);
+create index tenant_id3_idx on player_score(tenant_id);
 create index competition_id_idx on player_score(competition_id);
