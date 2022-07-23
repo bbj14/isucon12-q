@@ -64,7 +64,7 @@ func getEnv(key string, defaultValue string) string {
 func connectAdminDB() (*sqlx.DB, error) {
 	config := mysql.NewConfig()
 	config.Net = "tcp"
-	config.Addr = getEnv("ISUCON_DB_HOST", "127.0.0.1") + ":" + getEnv("ISUCON_DB_PORT", "3306")
+	config.Addr = "192.168.0.12:3306"
 	config.User = getEnv("ISUCON_DB_USER", "isucon")
 	config.Passwd = getEnv("ISUCON_DB_PASSWORD", "isucon")
 	config.DBName = getEnv("ISUCON_DB_NAME", "isuports")
@@ -1401,37 +1401,75 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error flockByTenantID: %w", err)
 	}
 	defer fl.Close()
-	pss := []PlayerScoreRow{}
+
+	type s struct {
+		PlayerScoreRow *PlayerScoreRow `db:"ps"`
+		PlayerRow      *PlayerRow      `db:"p"`
+	}
+	var ss []s
 	if err := tenantDB.SelectContext(
 		ctx,
-		&pss,
-		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
+		&ss,
+		`SELECT
+			ps.score AS "ps.score",
+			ps.row_num AS "ps.row_num",
+			p.id AS "p.id",
+			p.display_name AS "p.display_name"
+		FROM player_score AS ps LEFT JOIN player AS p ON ps.player_id = p.id WHERE ps.tenant_id = ? AND ps.competition_id = ?`,
 		tenant.ID,
 		competitionID,
 	); err != nil {
 		return fmt.Errorf("error Select player_score: tenantID=%d, competitionID=%s, %w", tenant.ID, competitionID, err)
 	}
-	ranks := make([]CompetitionRank, 0, len(pss))
-	scoredPlayerSet := make(map[string]struct{}, len(pss))
-	for _, ps := range pss {
+
+	// pss := []PlayerScoreRow{}
+	// if err := tenantDB.SelectContext(
+	// 	ctx,
+	// 	&pss,
+	// 	"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
+	// 	tenant.ID,
+	// 	competitionID,
+	// ); err != nil {
+	// 	return fmt.Errorf("error Select player_score: tenantID=%d, competitionID=%s, %w", tenant.ID, competitionID, err)
+	// }
+
+	ranks := make([]CompetitionRank, 0, len(ss))
+	scoredPlayerSet := make(map[string]struct{}, len(ss))
+	for _, s := range ss {
 		// player_scoreが同一player_id内ではrow_numの降順でソートされているので
 		// 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
-		if _, ok := scoredPlayerSet[ps.PlayerID]; ok {
+		if _, ok := scoredPlayerSet[s.PlayerRow.ID]; ok {
 			continue
 		}
-		scoredPlayerSet[ps.PlayerID] = struct{}{}
-		p, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
-		if err != nil {
-			return fmt.Errorf("error retrievePlayer: %w", err)
-		}
+		scoredPlayerSet[s.PlayerRow.ID] = struct{}{}
 		ranks = append(ranks, CompetitionRank{
-			Score:             ps.Score,
-			PlayerID:          p.ID,
-			PlayerDisplayName: p.DisplayName,
-			RowNum:            ps.RowNum,
+			Score:             s.PlayerScoreRow.Score,
+			PlayerID:          s.PlayerRow.ID,
+			PlayerDisplayName: s.PlayerRow.DisplayName,
+			RowNum:            s.PlayerScoreRow.RowNum,
 		})
 	}
+	// ranks := make([]CompetitionRank, 0, len(pss))
+	// for _, ps := range pss {
+	// 	// player_scoreが同一player_id内ではrow_numの降順でソートされているので
+	// 	// 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
+	// 	if _, ok := scoredPlayerSet[ps.PlayerID]; ok {
+	// 		continue
+	// 	}
+	// 	scoredPlayerSet[ps.PlayerID] = struct{}{}
+	// 	p, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
+	// 	if err != nil {
+	// 		return fmt.Errorf("error retrievePlayer: %w", err)
+	// 	}
+	// 	ranks = append(ranks, CompetitionRank{
+	// 		Score:             ps.Score,
+	// 		PlayerID:          p.ID,
+	// 		PlayerDisplayName: p.DisplayName,
+	// 		RowNum:            ps.RowNum,
+	// 	})
+	// }
 	sort.Slice(ranks, func(i, j int) bool {
+		// スコアが一緒ならrow_numが小さい方（早く点を取った方）
 		if ranks[i].Score == ranks[j].Score {
 			return ranks[i].RowNum < ranks[j].RowNum
 		}
