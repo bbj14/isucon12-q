@@ -16,6 +16,14 @@ mysql -u"$ISUCON_DB_USER" \
 		--port "$ISUCON_DB_PORT" \
 		"$ISUCON_DB_NAME" < init.sql
 
+# MySQLを初期化
+mysql -u"$ISUCON_DB_USER" \
+		-p"$ISUCON_DB_PASSWORD" \
+		--host "192.168.0.13" \
+		--port "$ISUCON_DB_PORT" \
+		"$ISUCON_DB_NAME" < init.sql
+
+
 # SQLiteのデータベースを初期化
 rm -f ../tenant_db/*.db
 cp -r ../../initial_data/*.db ../tenant_db/

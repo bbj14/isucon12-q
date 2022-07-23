@@ -48,6 +48,8 @@ var (
 
 	adminDB *sqlx.DB
 
+	adminIdgenDB *sqlx.DB
+
 	sqliteDriverName = "sqlite3"
 )
 
@@ -64,6 +66,19 @@ func connectAdminDB() (*sqlx.DB, error) {
 	config := mysql.NewConfig()
 	config.Net = "tcp"
 	config.Addr = "192.168.0.12:3306"
+	config.User = getEnv("ISUCON_DB_USER", "isucon")
+	config.Passwd = getEnv("ISUCON_DB_PASSWORD", "isucon")
+	config.DBName = getEnv("ISUCON_DB_NAME", "isuports")
+	config.ParseTime = true
+	dsn := config.FormatDSN()
+	return sqlx.Open("mysql", dsn)
+}
+
+// 管理用DBに接続する
+func connectIDgenAdminDB() (*sqlx.DB, error) {
+	config := mysql.NewConfig()
+	config.Net = "tcp"
+	config.Addr = "192.168.0.13:3306"
 	config.User = getEnv("ISUCON_DB_USER", "isucon")
 	config.Passwd = getEnv("ISUCON_DB_PASSWORD", "isucon")
 	config.DBName = getEnv("ISUCON_DB_NAME", "isuports")
@@ -105,7 +120,7 @@ func dispenseID(ctx context.Context) (string, error) {
 	var lastErr error
 	for i := 0; i < 100; i++ {
 		var ret sql.Result
-		ret, err := adminDB.ExecContext(ctx, "REPLACE INTO id_generator (stub) VALUES (?);", "a")
+		ret, err := adminIdgenDB.ExecContext(ctx, "REPLACE INTO id_generator (stub) VALUES (?);", "a")
 		if err != nil {
 			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlock
 				lastErr = fmt.Errorf("error REPLACE INTO id_generator: %w", err)
@@ -197,8 +212,18 @@ func Run() {
 		e.Logger.Fatalf("failed to connect db: %v", err)
 		return
 	}
-	adminDB.SetMaxOpenConns(10)
+
+	adminIdgenDB, err = connectIDgenAdminDB()
+	if err != nil {
+		e.Logger.Fatalf("failed to connect db: %v", err)
+		return
+	}
+
+	adminDB.SetMaxOpenConns(20)
 	defer adminDB.Close()
+
+	adminIdgenDB.SetMaxOpenConns(20)
+	defer adminIdgenDB.Close()
 
 	port := getEnv("SERVER_APP_PORT", "3000")
 	e.Logger.Infof("starting isuports server on : %s ...", port)
@@ -670,6 +695,7 @@ func tenantsBillingHandler(c echo.Context) error {
 	if err := adminDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id DESC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
+
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	for _, t := range ts {
 		if beforeID != 0 && beforeID <= t.ID {
