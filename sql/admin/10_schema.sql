@@ -17,8 +17,9 @@ CREATE TABLE `tenant` (
 CREATE TABLE `id_generator` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `stub` CHAR(1) NOT NULL DEFAULT '',
+  `tenant_id` BIGINT NOT NULL,
   PRIMARY KEY  (`id`),
-  UNIQUE KEY `stub` (`stub`)
+  FOREIGN KEY fk_tenantId (tenant_id) REFERENCES tenant(id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
 
 CREATE TABLE `visit_history` (
@@ -26,8 +27,7 @@ CREATE TABLE `visit_history` (
   `tenant_id` BIGINT UNSIGNED NOT NULL,
   `competition_id` VARCHAR(255) NOT NULL,
   `created_at` BIGINT NOT NULL,
-  `updated_at` BIGINT NOT NULL,
-  INDEX `tenant_id_idx` (`tenant_id`)
+  `updated_at` BIGINT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
 
 ALTER TABLE visit_history ADD INDEX player_competition_tenant(player_id, tenant_id, competition_id); 
