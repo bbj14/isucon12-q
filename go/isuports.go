@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/goccy/go-json"
 	"github.com/gofrs/flock"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -148,11 +149,29 @@ func SetCacheControlPrivate(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+type JSONSerializer struct{}
+
+func (j *JSONSerializer) Serialize(c echo.Context, i interface{}, indent string) error {
+	enc := json.NewEncoder(c.Response())
+	return enc.Encode(i)
+}
+
+func (j *JSONSerializer) Deserialize(c echo.Context, i interface{}) error {
+	err := json.NewDecoder(c.Request().Body).Decode(i)
+	if ute, ok := err.(*json.UnmarshalTypeError); ok {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Unmarshal type error: expected=%v, got=%v, field=%v, offset=%v", ute.Type, ute.Value, ute.Field, ute.Offset)).SetInternal(err)
+	} else if se, ok := err.(*json.SyntaxError); ok {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Syntax error: offset=%v, error=%v", se.Offset, se.Error())).SetInternal(err)
+	}
+	return err
+}
+
 // Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
 func Run() {
 	e := echo.New()
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
+	e.JSONSerializer = &JSONSerializer{}
 
 	var (
 		sqlLogger io.Closer
@@ -1400,37 +1419,75 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error flockByTenantID: %w", err)
 	}
 	defer fl.Close()
-	pss := []PlayerScoreRow{}
+
+	type s struct {
+		PlayerScoreRow *PlayerScoreRow `db:"ps"`
+		PlayerRow      *PlayerRow      `db:"p"`
+	}
+	var ss []s
 	if err := tenantDB.SelectContext(
 		ctx,
-		&pss,
-		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
+		&ss,
+		`SELECT
+			ps.score AS "ps.score",
+			ps.row_num AS "ps.row_num",
+			p.id AS "p.id",
+			p.display_name AS "p.display_name"
+		FROM player_score AS ps LEFT JOIN player AS p ON ps.player_id = p.id WHERE ps.tenant_id = ? AND ps.competition_id = ?`,
 		tenant.ID,
 		competitionID,
 	); err != nil {
 		return fmt.Errorf("error Select player_score: tenantID=%d, competitionID=%s, %w", tenant.ID, competitionID, err)
 	}
-	ranks := make([]CompetitionRank, 0, len(pss))
-	scoredPlayerSet := make(map[string]struct{}, len(pss))
-	for _, ps := range pss {
+
+	// pss := []PlayerScoreRow{}
+	// if err := tenantDB.SelectContext(
+	// 	ctx,
+	// 	&pss,
+	// 	"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
+	// 	tenant.ID,
+	// 	competitionID,
+	// ); err != nil {
+	// 	return fmt.Errorf("error Select player_score: tenantID=%d, competitionID=%s, %w", tenant.ID, competitionID, err)
+	// }
+
+	ranks := make([]CompetitionRank, 0, len(ss))
+	scoredPlayerSet := make(map[string]struct{}, len(ss))
+	for _, s := range ss {
 		// player_scoreが同一player_id内ではrow_numの降順でソートされているので
 		// 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
-		if _, ok := scoredPlayerSet[ps.PlayerID]; ok {
+		if _, ok := scoredPlayerSet[s.PlayerRow.ID]; ok {
 			continue
 		}
-		scoredPlayerSet[ps.PlayerID] = struct{}{}
-		p, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
-		if err != nil {
-			return fmt.Errorf("error retrievePlayer: %w", err)
-		}
+		scoredPlayerSet[s.PlayerRow.ID] = struct{}{}
 		ranks = append(ranks, CompetitionRank{
-			Score:             ps.Score,
-			PlayerID:          p.ID,
-			PlayerDisplayName: p.DisplayName,
-			RowNum:            ps.RowNum,
+			Score:             s.PlayerScoreRow.Score,
+			PlayerID:          s.PlayerRow.ID,
+			PlayerDisplayName: s.PlayerRow.DisplayName,
+			RowNum:            s.PlayerScoreRow.RowNum,
 		})
 	}
+	// ranks := make([]CompetitionRank, 0, len(pss))
+	// for _, ps := range pss {
+	// 	// player_scoreが同一player_id内ではrow_numの降順でソートされているので
+	// 	// 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
+	// 	if _, ok := scoredPlayerSet[ps.PlayerID]; ok {
+	// 		continue
+	// 	}
+	// 	scoredPlayerSet[ps.PlayerID] = struct{}{}
+	// 	p, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
+	// 	if err != nil {
+	// 		return fmt.Errorf("error retrievePlayer: %w", err)
+	// 	}
+	// 	ranks = append(ranks, CompetitionRank{
+	// 		Score:             ps.Score,
+	// 		PlayerID:          p.ID,
+	// 		PlayerDisplayName: p.DisplayName,
+	// 		RowNum:            ps.RowNum,
+	// 	})
+	// }
 	sort.Slice(ranks, func(i, j int) bool {
+		// スコアが一緒ならrow_numが小さい方（早く点を取った方）
 		if ranks[i].Score == ranks[j].Score {
 			return ranks[i].RowNum < ranks[j].RowNum
 		}

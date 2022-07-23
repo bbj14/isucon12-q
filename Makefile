@@ -1,5 +1,9 @@
 GO_SERVICE_NAME:=isuports.service
 
+.PHONY: initmysql
+initmysql:
+	cat sql/admin/10_schema.sql sql/admin/90_data.sql | mysql -pisucon
+
 .PHONY: deploy
 deploy:
 	bash ./deploy.sh
