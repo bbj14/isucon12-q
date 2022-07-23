@@ -9,7 +9,7 @@ do
    rsync -av  --exclude '.git' ./ isucon${h}:/home/isucon/webapp/
    ssh isucon${h} sudo systemctl restart isuports.service
    ssh isucon${h} sudo cp /home/isucon/webapp/nginx${h}.conf /etc/nginx/nginx.conf
-   ssh isucon${h} sudo cp /home/isucon/webapp/mysqld${h}.cnf /etc/mysql/mysql.conf.d/mysqld.cnf
+   ssh isucon${h} sudo cp /home/isucon/webapp/mysqld.cnf /etc/mysql/mysql.conf.d/mysqld.cnf
 done
 
 # nginx
